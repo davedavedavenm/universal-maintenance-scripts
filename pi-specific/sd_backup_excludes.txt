@@ -1,0 +1,31 @@
+# Cache files and directories
+**/.cache/
+/var/cache/**
+/home/*/.cache/**
+
+# Temporary files and directories
+/tmp/**
+/var/tmp/**
+
+# Lost and found (filesystem recovery)
+lost+found/
+
+# Docker internal directories (if they were part of a source dir, which they are not here)
+# /var/lib/docker/overlay2/**
+# /var/lib/docker/containers/**
+# /var/lib/docker/image/**
+
+# System-specific dynamic/virtual filesystems
+/proc/**
+/sys/**
+/dev/**
+/run/**
+
+# Common mount points for external media or other filesystems we might not want
+/mnt/**
+/media/**
+
+# Specific log files - optional, as rclone will version them.
+# Your PI_LOGS_DIR will be backed up if it's under /home/dave, which is fine.
+# /var/log/*.gz
+# /var/log/journal/**
