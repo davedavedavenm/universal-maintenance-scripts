@@ -1,157 +1,157 @@
-
 # Universal Maintenance Scripts
 
-This repository contains a collection of scripts designed to automate essential maintenance, diagnostic, and backup tasks for Linux servers, including Debian/Ubuntu-based VPS instances and Raspberry Pi devices.
+This repository contains a collection of scripts designed to automate essential maintenance, diagnostic, and backup tasks for Linux servers. It is primarily managed on a Hetzner VPS (`dave-vps-arm`) but includes components adaptable for other Debian/Ubuntu-based systems and Raspberry Pi devices.
 
 ## Overview
 
-The primary goal of these scripts is to provide a reliable and configurable way to manage server health, security, and data integrity through automated (cron-driven) and manual utilities.
+The goal is to provide a reliable and configurable way to manage server health, security, data integrity, and certificate monitoring through automated (cron-driven) and manual utilities, with clear distinctions for different host environments.
 
-## Scripts Included
+## Repository Structure
 
-### Core Automated Maintenance Scripts
-These scripts are typically run via cron jobs.
+-   **`/` (Root Directory):** Contains universal scripts, main configuration (`config.sh`), and core utilities (`email_utils.sh`) primarily used by the Hetzner VPS. Some scripts here can be adapted for other systems.
+-   **`/pi-specific/`:** Contains scripts and configurations (`pi_config.sh`, `sd_backup_excludes.txt`) tailored for Raspberry Pi devices.
+
+## I. Hetzner VPS (`dave-vps-arm`) Specific Setup
+
+This section details scripts and configurations as they are set up and run on the primary Hetzner VPS.
+
+### A. Core Automated Scripts (Run via root's cron on Hetzner VPS)
+These utilize `config.sh` and `email_utils.sh` from this repository.
 
 *   **`backup_system_tarball.sh`**:
-    *   Performs a full system backup by creating a compressed tarball of the root filesystem (excluding specified paths).
-    *   Manages Docker containers (stopping/starting specific services) during the backup process if configured.
-    *   Uploads the backup to a cloud storage remote using `rclone`.
-    *   Sends an HTML email notification with the backup status and log snippet.
+    *   Performs system backup to a tarball, manages Docker services, uploads via `rclone`.
+    *   Sends HTML email notification.
+    *   Cron: Weekly (e.g., Sunday 3 AM).
 *   **`system_update.sh`**:
-    *   Updates system packages (e.g., using `apt`).
-    *   Handles unattended upgrades and can perform a reboot if required by updates.
-    *   Sends an HTML email notification with the update status and log snippet.
+    *   Updates system packages using `apt`), handles reboots.
+    *   Sends HTML email notification.
+    *   Cron: Weekly (e.g., Sunday 4 AM).
 *   **`system_status.sh`**:
-    *   Generates a comprehensive system status report in HTML format, sent via email (typically weekly).
-    *   Includes: System Health (Disk, Memory, CPU Temp, Uptime), Maintenance Status (Backup/Update Logs), Security Status (SSH, Fail2ban), Service Status, Docker Container List, Network Ports, Firewall Status, Recent User Activity, and Certbot SSL Certificate Status.
+    *   Generates a comprehensive HTML system status email.
+    *   Includes: System Health, Maintenance Status, Security, Services, Docker, Network, Firewall, User Activity, Host Certbot Status.
+    *   Cron: Weekly (e.g., Sunday 7 AM).
 *   **`find_certbot_domains_status.sh`**:
-    *   Checks all SSL certificates managed by the host's Certbot.
-    *   Sends an HTML email notification *only if* issues are found (e.g., certificates expiring soon, renewal errors).
-    *   Intended for daily cron execution to provide timely alerts.
+    *   Monitors SSL certificates managed by the **host's Certbot instance on this Hetzner VPS**.
+    *   Sends an HTML email notification *only if* issues are found (expiry, errors).
+    *   Cron: Daily (e.g., 5 AM).
 
-### Manual Utility & Diagnostic Scripts
+### B. System-Level Certbot Renewal & Hetzner Traefik Monitoring (Hetzner VPS)
+This script is **part of the Hetzner VPS system configuration, not directly in this Git repository's versioned files.**
+*   **Location:** `/usr/local/sbin/certbot_check_renew.sh`
+*   **Triggered by:** Systemd `certbot.timer` (via `certbot.service` override) approximately twice daily.
+*   **Purpose on Hetzner VPS:**
+    1.  Runs `/usr/bin/certbot renew --non-interactive` for actual host Certbot renewals.
+    2.  Checks Traefik `acme.json` on the Hetzner VPS (path: `/home/dave/docker_apps/pangolin_stack/config/letsencrypt/acme.json`).
+    3.  Sends plain text email alerts ONLY for critical `certbot renew` command failures or Traefik certificates (on Hetzner) expiring soon.
 
-*   **`cleanup.sh`**:
-    *   An interactive script to help clean system resources.
-    *   Offers options to clean Docker resources (unused containers, images, volumes, networks, build cache), temporary files, and the `apt` cache.
-*   **`update_cloudflared.sh`**:
-    *   Updates a Cloudflared tunnel instance running via a specific Docker Compose file.
-    *   Pulls the latest image and restarts the container. Sends an HTML email notification.
-*   **`find_certbot_domains_status.sh`** (Manual Use):
-    *   Can also be run manually to quickly check the status of all Certbot certificates (outputs to console if no issues).
+### C. Manual Utility Scripts (in `~/universal-maintenance-scripts/` on Hetzner VPS)
+*   **`cleanup.sh`**: Interactive system cleanup (Docker, temp files, apt). Run with `sudo`.
+*   **`update_cloudflared.sh`**: Updates Cloudflared Docker instance (path `/home/dave/cloudflared/docker-compose.yml`). Uses `config.sh` for notifications. Run with `sudo`. (Can be cronned if desired).
 
-### Pi-Specific Scripts (Located in `pi-specific/` subfolder)
+## II. Scripts for Other Systems (e.g., Oracle VPS, Other Traefik Instances)
 
-*   **`pi-specific/sd_backup.sh`**:
-    *   Designed specifically for Raspberry Pi devices to back up the entire SD card content.
-    *   Uses `rsync` to copy the filesystem, creates a tarball, and uploads it via `rclone`.
-    *   Configured via `pi-specific/pi_config.sh`.
-*   **`pi-specific/pi_config.sh`**:
-    *   Configuration file for `sd_backup.sh` and other Pi-specific scripts. Contains Pi-specific paths, rclone settings, etc.
-*   **`pi-specific/sd_backup_excludes.txt`**:
-    *   Exclude list for the `sd_backup.sh` script.
+*   **`check_traefik_certs.sh` (Template/Example):**
+    *   A version of this script (template provided separately during setup discussions) is intended for deployment on any server running Traefik where its `acme.json` needs monitoring (e.g., your Oracle VPS).
+    *   This script is **not automatically deployed** from this repository. It should be copied to the target server and customized.
+    *   Requires its own on-server configuration (variables at the top of that script), `msmtp`/`mail` setup, and cron job *on that target server*.
+    *   (Example on Oracle VPS: `/home/opc/scripts/check_traefik_certs.sh`, monitoring `/home/opc/migration/config/letsencrypt/acme.json`, run by `opc` user's cron).
 
-### Configuration & Core Utilities
+## III. For Raspberry Pi Devices (in `pi-specific/` of this repository)
+
+These scripts are versioned here and intended for deployment to Raspberry Pi devices.
+
+*   **`pi-specific/sd_backup.sh`**: Backs up Raspberry Pi SD card contents using `rsync` and `rclone`.
+*   **`pi-specific/pi_config.sh`**: **Crucial configuration file for `sd_backup.sh`**. Must be customized on each Pi with Pi-specific user, paths, rclone settings, etc.
+*   **`pi-specific/sd_backup_excludes.txt`**: Exclude list for `sd_backup.sh`.
+
+## IV. Configuration & Core Utilities (in `~/universal-maintenance-scripts/`)
+
+These are primarily used by the scripts running on the Hetzner VPS.
 
 *   **`config.sh`**:
-    *   **Central configuration file for all universal scripts.**
-    *   **Must be edited** to set user-specific details: `PI_EMAIL` (recipient for notifications), `PI_LOGS_DIR` (log storage), `PI_HOSTNAME` (or `HOSTNAME_LABEL`), `PI_MSMTP_CONFIG` (path to root msmtp config), `PI_MSMTP_LOG` (path for root msmtp log), rclone remote names, etc.
+    *   **Central configuration file.** MUST BE EDITED with details for the system it's on (primarily for Hetzner VPS: `PI_EMAIL`, `PI_LOGS_DIR`, `HOSTNAME_LABEL`, `PI_MSMTP_CONFIG`, `PI_MSMTP_LOG`).
+    *   Sources `email_utils.sh`.
 *   **`email_utils.sh`**:
-    *   Provides common functions (`generate_email_html`, `send_html_notification`) for creating and sending HTML email notifications. Sourced by `config.sh`.
+    *   Provides common functions (`generate_email_html`, `send_html_notification`) for HTML email notifications.
 
-## Setup and Configuration
+## General Setup Instructions
 
-1.  **Clone the Repository:**
+1.  **Clone Repository (on each target machine where scripts will be run):**
     ```bash
     git clone https://github.com/davedavedavenm/universal-maintenance-scripts.git
     cd universal-maintenance-scripts
     ```
 
-2.  **Review and Edit `config.sh`:**
-    This is the most crucial step. Open `config.sh` and customize the variables for your environment:
+2.  **Configure `config.sh` (on Hetzner VPS / Primary Machine):**
     ```bash
-    nano config.sh
+    nano config.sh 
     ```
-    Pay close attention to `PI_EMAIL`, `PI_LOGS_DIR`, `PI_MSMTP_CONFIG`, `PI_MSMTP_LOG`, and any rclone related variables if used directly by scripts (though `backup_system_tarball.sh` has its own internal rclone logic that might also need checking/configuration).
+    Set `PI_EMAIL`, `PI_LOGS_DIR`, etc.
 
-3.  **For Pi Usage - Review and Edit `pi-specific/pi_config.sh`:**
-    If you intend to use the Pi-specific scripts on a Raspberry Pi:
+3.  **Configure `pi-specific/pi_config.sh` (on each Pi):**
     ```bash
     nano pi-specific/pi_config.sh
     ```
-    Customize it for each Pi's specific setup (hostname, backup remotes, user, paths). Also ensure `pi-specific/sd_backup_excludes.txt` meets your needs.
+    Set Pi-specific details.
 
-4.  **Install Dependencies:**
-    Ensure the following command-line tools are installed. On Debian/Ubuntu:
+4.  **Configure `check_traefik_certs.sh` (on Oracle VPS / Other Traefik Hosts):**
+    Copy a template of `check_traefik_certs.sh` (similar to the one developed for Oracle VPS) to the target machine, place it (e.g., in `~/scripts`), and edit its internal configuration block.
+
+5.  **Install Dependencies (on each relevant machine):**
     ```bash
+    # Example for Debian/Ubuntu (adjust for Oracle Linux using dnf)
     sudo apt update
-    sudo apt install -y msmtp msmtp-mta rclone tar gzip bc coreutils util-linux procps bsd-mailx fail2ban ufw docker.io docker-compose certbot python3-certbot-dns-cloudflare # Adjust as needed
+    sudo apt install -y msmtp msmtp-mta rclone tar gzip bc coreutils util-linux procps bsd-mailx fail2ban ufw docker.io docker-compose certbot python3-certbot-dns-cloudflare jq openssl
     ```
-    *   `msmtp`, `msmtp-mta`: For sending emails.
-    *   `rclone`: For cloud backups.
-    *   `bc`: For calculations (e.g., CPU temperature).
-    *   `docker.io`, `docker-compose`: If using Docker-related scripts.
-    *   `certbot`, `python3-certbot-dns-cloudflare`: If using Certbot scripts with Cloudflare DNS.
-    *   Others are generally standard.
+    *   **Oracle/RHEL-based:** Use `sudo dnf install -y ...` for these packages.
 
-5.  **Configure MSMTP:**
-    For email notifications to work, `msmtp` must be configured. Create/edit the system-wide configuration file specified in `config.sh` (e.g., `/etc/msmtprc`). This file will contain your SMTP server details and credentials.
-    Example for `/etc/msmtprc` (permissions `600`, owned by `root`):
-    ```
-    defaults
-    auth           on
-    tls            on
-    tls_trust_file /etc/ssl/certs/ca-certificates.crt
-    logfile        [Path_From_PI_MSMTP_LOG_in_config.sh] # e.g., /home/dave/vps_maintenance_logs/msmtp_root.log
+6.  **Configure MSMTP/Mail Sending (on each machine that needs to send email):**
+    *   For root-run scripts on Hetzner: Configure `/etc/msmtprc` (see `PI_MSMTP_CONFIG` and `PI_MSMTP_LOG` in `config.sh`).
+    *   For `opc`-run script on Oracle: Configure `/home/opc/.msmtprc` (or as defined in `check_traefik_certs.sh`).
+    *   Ensure `msmtprc` files have `chmod 600` permissions.
 
-    account        default
-    host           smtp.yourprovider.com
-    port           587
-    from           your_sending_email@example.com
-    user           your_smtp_username
-    password       your_smtp_password_or_app_password
-
-    # Fallback account (optional)
-    # account default : default
-    ```
-    **Secure this file properly as it contains credentials.**
-
-6.  **Make Scripts Executable:**
+7.  **Make Scripts Executable (on each machine):**
     ```bash
     chmod +x *.sh
-    chmod +x pi-specific/*.sh
+    chmod +x pi-specific/*.sh 
+    # And chmod +x /path/to/check_traefik_certs.sh on Oracle, etc.
     ```
 
-## Usage
+## Cron Job Setup Examples
 
-### Automated Scripts (Cron Jobs)
-Edit root's crontab: `sudo crontab -e`
-Add entries similar to the following, adjusting paths and schedules as needed:
-
+### Hetzner VPS (root's crontab - `sudo crontab -e`)
 ```cron
-# Example Cron Entries (run as root)
-
-# Daily: Check Certbot certificates and alert on issues
+# Daily: Host Certbot Problem Alerter (HTML email ONLY on issues)
 0 5 * * * /home/dave/universal-maintenance-scripts/find_certbot_domains_status.sh
 
-# Weekly: Full System Status Report (e.g., Sunday at 7 AM)
+# Weekly: Full System Status Report (Sunday 7 AM)
 0 7 * * 0 /home/dave/universal-maintenance-scripts/system_status.sh
 
-# Weekly: System Package Updates (e.g., Sunday at 4 AM)
+# Weekly: System Package Updates (Sunday 4 AM)
 0 4 * * 0 /home/dave/universal-maintenance-scripts/system_update.sh
 
-# Daily: System Tarball Backup (e.g., at 3 AM)
-0 3 * * * /home/dave/universal-maintenance-scripts/backup_system_tarball.sh
+# Weekly: System Tarball Backup (Sunday 3 AM)
+0 3 * * 0 /home/dave/universal-maintenance-scripts/backup_system_tarball.sh
 
-# Daily/Weekly: Update Cloudflared (if used and managed by this script)
-# 0 2 * * 1 /home/dave/universal-maintenance-scripts/update_cloudflared.sh # Example for weekly
+# Note: The system's certbot.timer runs /usr/local/sbin/certbot_check_renew.sh for actual renewals and Hetzner Traefik checks.
 Use code with caution.
 Markdown
-Manual Scripts
-Navigate to ~/universal-maintenance-scripts/ and run as needed. Some scripts require sudo.
-sudo ./cleanup.sh (Interactive)
-sudo ./update_cloudflared.sh
-For Pi scripts, navigate to pi-specific/ on the Pi.
+Oracle VPS (opc user's crontab - crontab -e)
+# Daily: Traefik Certificate Expiry Check (emails ONLY on issues)
+30 5 * * * /home/opc/scripts/check_traefik_certs.sh > /dev/null 2>&1
+Use code with caution.
+Cron
+Raspberry Pi (e.g., pi user's crontab)
+# Daily: SD Card Backup (adjust path to where you cloned the scripts on the Pi)
+# 0 2 * * * /home/pi/universal-maintenance-scripts/pi-specific/sd_backup.sh
+Use code with caution.
+Cron
+Overall Certificate Monitoring Strategy
+Hetzner VPS (Host Certbot): find_certbot_domains_status.sh (daily cron) for expiry/error alerts. Actual renewals by system certbot.timer (via modified /usr/local/sbin/certbot_check_renew.sh).
+Hetzner VPS (Traefik): /usr/local/sbin/certbot_check_renew.sh (twice-daily systemd timer) for expiry/error alerts.
+Oracle VPS (Traefik): check_traefik_certs.sh (daily cron by opc user) for expiry/error alerts.
+Pi Devices (Host Certbot, if used): Deploy find_certbot_domains_status.sh, config.sh, email_utils.sh to Pi, customize config.sh for Pi, and set up cron.
+(Recommended Future Addition) External Monitoring: Consider setting up Uptime Kuma (self-hosted Docker app) or a similar service to monitor all public-facing HTTPS endpoints from an external perspective for an additional layer of certificate expiry and uptime monitoring.
 Logging
-Most scripts log their activities to the directory specified by PI_LOGS_DIR in config.sh (e.g., /home/dave/vps_maintenance_logs/). Each script typically creates its own log file (e.g., system_update.log, backup_system_tarball.log).
-This README provides a general guide. Please adapt configurations and scripts to your specific server environments and requirements.
+Logs are generally stored in the directory specified by PI_LOGS_DIR (in config.sh on Hetzner) or as defined in individual scripts on other systems (e.g., /home/opc/logs on Oracle).
+This repository is the central place for managing these scripts. Adapt and deploy components as needed for each target system.
